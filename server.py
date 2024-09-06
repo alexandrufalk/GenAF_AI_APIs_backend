@@ -18,7 +18,9 @@ model = tf.keras.models.load_model(r'D:\Projects\GenAF_AI_APIs\genaf_ai_apis_bac
 #Load object detection model
 detector = hub.load("https://kaggle.com/models/tensorflow/efficientdet/frameworks/TensorFlow2/variations/d0/versions/1")
 
+#load mobilenet_v2 model
 
+detector_mnet=hub.load("https://kaggle.com/models/google/mobilenet-v2/frameworks/TensorFlow1/variations/openimages-v4-ssd-mobilenet-v2/versions/1")
 
 def preprocess_image(image):
     # Open and preprocess the image
@@ -98,7 +100,62 @@ def detect():
         detection_multiclass_scores = detector_output["detection_multiclass_scores"].numpy().tolist()
 
         result = {
-            # 'num_detections': num_detections,
+            'num_detections': num_detections,
+            'detection_boxes': detection_boxes,
+            'detection_classes': detection_classes,
+            'detection_scores': detection_scores,
+            # 'raw_detection_boxes': raw_detection_boxes,
+            # 'raw_detection_scores': raw_detection_scores,
+            # 'detection_anchor_indices': detection_anchor_indices,
+            # 'detection_multiclass_scores': detection_multiclass_scores
+        }
+
+        
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+
+@app.route('/detect_mnet', methods=['POST'])
+def detect_mnet():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    try:
+        # Preprocess the image
+        image_tensor = preprocess_image(file)
+        
+        # Ensure the tensor is of type tf.uint8 and has the correct shape
+        if image_tensor.dtype != tf.float32:
+            image_tensor = tf.cast(image_tensor, dtype=tf.float32)
+
+        # Scale the values from [0, 255] to [0.0, 1.0]
+        image_tensor /= 255.0    
+        
+        # Apply the model
+        detector_output = detector_mnet(image_tensor)
+
+        # Extract and convert model outputs to lists
+        num_detections = int(detector_output["detection_class_labels"].numpy())
+        detection_boxes = detector_output["detection_boxes"].numpy().tolist()
+        detection_classes = detector_output["detection_class_name"].numpy().tolist()
+        detection_scores = detector_output["detection_scores"].numpy().tolist()
+
+        # Print detection boxes for debugging
+        print("Detection Boxes:")
+        for box in detection_boxes:
+            print(box)
+        
+        print("Classes:", detection_classes)
+        
+
+        result = {
+            'num_detections': num_detections,
             'detection_boxes': detection_boxes,
             'detection_classes': detection_classes,
             'detection_scores': detection_scores,
