@@ -7,6 +7,9 @@ import io
 from flask_cors import CORS
 from food_list import FOOD_LIST
 
+import keras
+
+
 
 
 app = Flask(__name__)
@@ -20,7 +23,14 @@ detector = hub.load("https://kaggle.com/models/tensorflow/efficientdet/framework
 
 #load mobilenet_v2 model
 
-detector_mnet=hub.load("https://kaggle.com/models/google/mobilenet-v2/frameworks/TensorFlow1/variations/openimages-v4-ssd-mobilenet-v2/versions/1")
+#detector_mnet=hub.load("https://kaggle.com/models/google/mobilenet-v2/frameworks/TensorFlow1/variations/openimages-v4-ssd-mobilenet-v2/versions/1")
+detector_mnet= hub.load("https://kaggle.com/models/google/mobilenet-v2/frameworks/TensorFlow1/variations/openimages-v4-ssd-mobilenet-v2/versions/1")
+
+
+
+print("Signatures",detector_mnet.signatures)
+signature_mnet = detector_mnet.signatures['default']
+print("signature_mnet:",signature_mnet)
 
 def preprocess_image(image):
     # Open and preprocess the image
@@ -79,6 +89,7 @@ def detect():
         
         # Apply the model
         detector_output = detector(image_tensor)
+        print("detector_output", detector_output)
 
         # Extract and convert model outputs to lists
         num_detections = int(detector_output["num_detections"].numpy())
@@ -121,55 +132,100 @@ def detect():
 def detect_mnet():
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
+    
+    
 
     file = request.files['file']
+
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
-
+    
     try:
-        # Preprocess the image
-        image_tensor = preprocess_image(file)
+        print("Try detect_mnet")
+
+        file=Image.open(file)
+        file=file.convert("RGB")
+        
+        # Preprocess image to match model input
+        image_resized=file.resize((512,512))
+        image_array=np.array(image_resized)/255.0
+        image_tensor=np.expand_dims(image_array,axis=0)
+
+        #print("Image-tensor typr", image_tensor.dtype)  
         
         # Ensure the tensor is of type tf.uint8 and has the correct shape
         if image_tensor.dtype != tf.float32:
             image_tensor = tf.cast(image_tensor, dtype=tf.float32)
+            #print("Image-tensor cast", image_tensor)  
 
-        # Scale the values from [0, 255] to [0.0, 1.0]
-        image_tensor /= 255.0    
+        
+
+        
+
+        #print("Image-tensor", image_tensor)  
         
         # Apply the model
-        detector_output = detector_mnet(image_tensor)
+        detector_output = signature_mnet(image_tensor)
+        print("detector_output", detector_output)
 
-        # Extract and convert model outputs to lists
-        num_detections = int(detector_output["detection_class_labels"].numpy())
+         # Extract detection outputs
         detection_boxes = detector_output["detection_boxes"].numpy().tolist()
-        detection_classes = detector_output["detection_class_name"].numpy().tolist()
+        detection_class_labels = detector_output["detection_class_labels"].numpy().tolist()
+        detection_class_names = detector_output["detection_class_names"].numpy().tolist()
+        print("detection_class_names",detection_class_names)
+        detection_class_entities = detector_output["detection_class_entities"].numpy().tolist()
         detection_scores = detector_output["detection_scores"].numpy().tolist()
 
-        # Print detection boxes for debugging
-        print("Detection Boxes:")
-        for box in detection_boxes:
-            print(box)
-        
-        print("Classes:", detection_classes)
+        # Convert byte strings to normal strings if needed
+        detection_class_names = [cls.decode('utf-8') if isinstance(cls, bytes) else cls for cls in detection_class_names]
+        detection_class_entities = [ent.decode('utf-8') if isinstance(ent, bytes) else ent for ent in detection_class_entities]
+
         
 
+        # Filter the results to only include detections with scores > 0.51
+        filtered_boxes = []
+        filtered_class_names = []
+        filtered_scores = []
+        filtered_labels = []
+        filtered_entities=[]
+
+        print("lenght od detection_score",len(detection_scores))
+
+        for i in range(len(detection_scores)):
+            
+            if detection_scores[i] > 0.3:  # Check if the score is greater than 0.51
+                
+                filtered_boxes.append(detection_boxes[i])
+                
+                filtered_class_names.append(detection_class_names[i])
+                filtered_scores.append(detection_scores[i])
+                filtered_labels.append(detection_class_labels[i])
+                filtered_entities.append(detection_class_entities[i])
+
+        # Count the number of filtered detections
+        num_detections = len(filtered_class_names)
+
+        # Create the result dictionary
         result = {
             'num_detections': num_detections,
-            'detection_boxes': detection_boxes,
-            'detection_classes': detection_classes,
-            'detection_scores': detection_scores,
-            # 'raw_detection_boxes': raw_detection_boxes,
-            # 'raw_detection_scores': raw_detection_scores,
-            # 'detection_anchor_indices': detection_anchor_indices,
-            # 'detection_multiclass_scores': detection_multiclass_scores
+            'detection_boxes': filtered_boxes,
+            'detection_classes': filtered_class_names,
+            'detection_scores': filtered_scores,
+            'detection_labels': filtered_labels,
+            'detection_entries': filtered_entities
         }
 
-        
-        
+        print("result:",result)
+
         return jsonify(result)
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+    
+    
+
 
 if __name__ == '__main__':
     app.run(debug=True)
