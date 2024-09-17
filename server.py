@@ -10,7 +10,7 @@ from food_list import FOOD_LIST
 import keras
 
 
-
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 app = Flask(__name__)
 CORS(app)
@@ -19,7 +19,7 @@ CORS(app)
 model = tf.keras.models.load_model(r'D:\Projects\GenAF_AI_APIs\genaf_ai_apis_backend\models\food_vision.keras')
 
 #Load object detection model
-detector = hub.load("https://kaggle.com/models/tensorflow/efficientdet/frameworks/TensorFlow2/variations/d0/versions/1")
+detector = hub.load("https://www.kaggle.com/models/tensorflow/efficientdet/TensorFlow2/d0/1")
 
 #load mobilenet_v2 model
 
