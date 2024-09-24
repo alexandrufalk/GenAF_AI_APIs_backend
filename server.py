@@ -1,13 +1,16 @@
 from flask import Flask, request, jsonify
 import tensorflow as tf
 import tensorflow_hub as hub
+import PIL
 from PIL import Image
 import numpy as np
 import io
+import base64
 from flask_cors import CORS
 from food_list import FOOD_LIST
 
 import keras
+from keras.utils import img_to_array
 
 
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
@@ -17,6 +20,11 @@ CORS(app)
 
 # Load the pre-trained Keras model
 model = tf.keras.models.load_model(r'D:\Projects\GenAF_AI_APIs\genaf_ai_apis_backend\models\food_vision.keras')
+
+def depth_to_space(x, block_size):
+    return tf.nn.depth_to_space(x, block_size=block_size)
+
+model_resolution=tf.keras.models.load_model(r'D:\Projects\GenAF_AI_APIs\genaf_ai_apis_backend\models\image_high_resolution_reconstruction.keras',custom_objects={'depth_to_space': depth_to_space})
 
 #Load object detection model
 detector = hub.load("https://www.kaggle.com/models/tensorflow/efficientdet/TensorFlow2/d0/1")
@@ -41,6 +49,36 @@ def preprocess_image(image):
     image = image[tf.newaxis, :]  # Add batch dimension
     return image
 
+def get_lowres_image(img, upscale_factor):
+    """Return low-resolution image to use as model input."""
+    return img.resize(
+        (img.size[0] // upscale_factor, img.size[1] // upscale_factor),
+        PIL.Image.BICUBIC,
+    )
+
+def upscale_image(model, img):
+    """Predict the result based on input image and restore the image as RGB."""
+    ycbcr = img.convert("YCbCr")
+    y, cb, cr = ycbcr.split()
+    y = img_to_array(y)
+    y = y.astype("float32") / 255.0
+
+    input = np.expand_dims(y, axis=0)
+    out = model.predict(input)
+
+    out_img_y = out[0]
+    out_img_y *= 255.0
+
+    # Restore the image in RGB color space.
+    out_img_y = out_img_y.clip(0, 255)
+    out_img_y = out_img_y.reshape((np.shape(out_img_y)[0], np.shape(out_img_y)[1]))
+    out_img_y = PIL.Image.fromarray(np.uint8(out_img_y), mode="L")
+    out_img_cb = cb.resize(out_img_y.size, PIL.Image.BICUBIC)
+    out_img_cr = cr.resize(out_img_y.size, PIL.Image.BICUBIC)
+    out_img = PIL.Image.merge("YCbCr", (out_img_y, out_img_cb, out_img_cr)).convert(
+        "RGB"
+    )
+    return out_img
 
 # Define a route for image prediction
 @app.route('/predict', methods=['POST'])
@@ -51,6 +89,7 @@ def predict():
     
     file = request.files['file']
     image = Image.open(io.BytesIO(file.read()))
+    
 
     # Preprocess the image
     image = image.resize((224, 224))  # Resize to match model input shape
@@ -69,6 +108,34 @@ def predict():
 
     # Convert the prediction to JSON and return
     return jsonify({'prediction': label_pred})
+
+# Define a route for image high resolution
+@app.route('/resolution', methods=['POST'])
+def resolution():
+    # Ensure an image file is in the request
+    upscale_factor = 3
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    image = Image.open(io.BytesIO(file.read()))
+   
+
+    # Preprocess the image
+    lowres_input = get_lowres_image(image, upscale_factor)
+    
+
+    # Perform the prediction
+    prediction = upscale_image(model_resolution, lowres_input)
+
+    # Convert the prediction to a format that can be returned (base64)
+    buffered = io.BytesIO()
+    prediction.save(buffered, format="JPEG")  # Or PNG depending on your needs
+    prediction_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    
+
+    # Return the base64-encoded image as a JSON response
+    return jsonify({'prediction': prediction_base64})
 
 @app.route('/detect', methods=['POST'])
 def detect():
