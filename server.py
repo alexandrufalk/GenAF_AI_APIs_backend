@@ -25,7 +25,7 @@ def depth_to_space(x, block_size):
     return tf.nn.depth_to_space(x, block_size=block_size)
 
 model_resolution=tf.keras.models.load_model(r'D:\Projects\GenAF_AI_APIs\genaf_ai_apis_backend\models\image_high_resolution_reconstruction.keras',custom_objects={'depth_to_space': depth_to_space})
-
+model_resolution2=tf.keras.models.load_model(r'D:\Projects\GenAF_AI_APIs\genaf_ai_apis_backend\models\image_high_resolution_reconstruction2.keras',custom_objects={'depth_to_space': depth_to_space})
 #Load object detection model
 detector = hub.load("https://www.kaggle.com/models/tensorflow/efficientdet/TensorFlow2/d0/1")
 
@@ -127,6 +127,33 @@ def resolution():
 
     # Perform the prediction
     prediction = upscale_image(model_resolution, lowres_input)
+
+    # Convert the prediction to a format that can be returned (base64)
+    buffered = io.BytesIO()
+    prediction.save(buffered, format="JPEG")  # Or PNG depending on your needs
+    prediction_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    
+
+    # Return the base64-encoded image as a JSON response
+    return jsonify({'prediction': prediction_base64})
+
+@app.route('/resolution2', methods=['POST'])
+def resolution2():
+    # Ensure an image file is in the request
+    upscale_factor = 3
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    image = Image.open(io.BytesIO(file.read()))
+   
+
+    # Preprocess the image
+    lowres_input = get_lowres_image(image, upscale_factor)
+    
+
+    # Perform the prediction
+    prediction = upscale_image(model_resolution2, lowres_input)
 
     # Convert the prediction to a format that can be returned (base64)
     buffered = io.BytesIO()
