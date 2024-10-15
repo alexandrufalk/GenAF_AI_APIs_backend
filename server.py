@@ -1,9 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import tensorflow as tf
 import tensorflow_hub as hub
 import PIL
-from PIL import Image
+from PIL import Image, ExifTags
 import numpy as np
+import os
 import io
 import base64
 from flask_cors import CORS
@@ -319,7 +320,69 @@ def detect_mnet():
 
 
     
-    
+@app.route('/upscale', methods=['POST'])
+def upscale_image():
+    if 'image' not in request.files:
+        
+        return jsonify({'error': 'No image part in the request.'}), 400
+
+    file = request.files['image']
+
+    if file.filename == '':
+        
+        return jsonify({'error': 'No selected file.'}), 400
+
+    if file and allowed_file(file.filename):
+        try:
+            
+            # Save the uploaded image to the uploads directory
+            filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+            file.save(filepath)
+            
+
+            # Open the image with correct orientation
+            lr_image = open_image_correct_orientation(filepath)
+            
+
+            # Preprocess the image
+            lr_image = lr_image.resize(
+                (lr_image.width // SCALE_FACTOR, lr_image.height // SCALE_FACTOR),
+                Image.BICUBIC
+            )
+            
+
+            lr_array = np.array(lr_image).astype(np.float32)
+            lr_array = (lr_array / 255.0) * 2.0 - 1.0  # Normalize to [-1, 1]
+            lr_array = np.expand_dims(lr_array, axis=0)  # Add batch dimension
+
+            # Generate high-resolution image
+            sr_array = srgan_generator_model_resolution.predict(lr_array)
+            sr_array = (sr_array + 1.0) / 2.0  # Denormalize to [0, 1]
+            sr_array = np.clip(sr_array, 0.0, 1.0)
+            sr_array = sr_array[0] * 255.0
+            sr_image = Image.fromarray(sr_array.astype(np.uint8))
+            
+
+            # Determine the input image format
+            input_format = lr_image.format if hasattr(lr_image, 'format') else 'PNG'
+
+            # Save the upscaled image to a BytesIO object
+            img_io = io.BytesIO()
+            sr_image.save(img_io, 'PNG')  # You can change 'PNG' to input_format if desired
+            img_io.seek(0)
+
+            # Optionally, remove the uploaded file to save space
+            os.remove(filepath)
+            logger.info(f"Removed temporary file: {filepath}")
+
+            return send_file(img_io, mimetype='image/png')
+
+        except Exception as e:
+            
+            return jsonify({'error': f'Error processing image: {str(e)}'}), 500
+    else:
+        
+        return jsonify({'error': 'Unsupported file type.'}), 400    
 
 
 if __name__ == '__main__':
