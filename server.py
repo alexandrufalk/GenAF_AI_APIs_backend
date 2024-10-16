@@ -82,6 +82,14 @@ def upscale_image(model, img):
     )
     return out_img
 
+# Define allowed extensions
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp', 'tiff'}
+
+def allowed_file(filename):
+    """Check if the file has an allowed extension."""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 # Define a route for image prediction
 @app.route('/predict', methods=['POST'])
 def predict():
