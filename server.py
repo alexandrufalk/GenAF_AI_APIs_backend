@@ -90,6 +90,27 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def open_image_correct_orientation(filepath):
+    """Open an image and correct its orientation based on EXIF data."""
+    with Image.open(filepath) as img:
+        try:
+            for orientation in ExifTags.TAGS.keys():
+                if ExifTags.TAGS[orientation] == 'Orientation':
+                    break
+            exif = img._getexif()
+            if exif is not None:
+                orientation_value = exif.get(orientation, None)
+                if orientation_value == 3:
+                    img = img.rotate(180, expand=True)
+                elif orientation_value == 6:
+                    img = img.rotate(270, expand=True)
+                elif orientation_value == 8:
+                    img = img.rotate(90, expand=True)
+        except (AttributeError, KeyError, IndexError):
+            # Cases: image don't have getexif
+            pass
+        return img.convert('RGB')
+
 # Define a route for image prediction
 @app.route('/predict', methods=['POST'])
 def predict():
