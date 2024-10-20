@@ -82,6 +82,10 @@ def upscale_image(model, img):
     )
     return out_img
 
+# Define upload folder
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 # Define allowed extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp', 'tiff'}
 
@@ -347,7 +351,11 @@ def detect_mnet():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
+# Define constants
+IMG_HEIGHT = 128  # Must match the height used during training
+IMG_WIDTH = 128    # Must match the width used during training
+CHANNELS = 3
+SCALE_FACTOR = 4
     
 @app.route('/upscale', methods=['POST'])
 def upscale_image():
@@ -402,7 +410,7 @@ def upscale_image():
 
             # Optionally, remove the uploaded file to save space
             os.remove(filepath)
-            logger.info(f"Removed temporary file: {filepath}")
+            
 
             return send_file(img_io, mimetype='image/png')
 
