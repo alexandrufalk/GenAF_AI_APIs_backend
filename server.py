@@ -29,7 +29,9 @@ model_resolution=tf.keras.models.load_model(r'D:\Projects\GenAF_AI_APIs\genaf_ai
 model_resolution2=tf.keras.models.load_model(r'D:\Projects\GenAF_AI_APIs\genaf_ai_apis_backend\models\image_high_resolution_reconstruction2.keras',custom_objects={'depth_to_space': depth_to_space})
 srgan_generator_model_resolution=tf.keras.models.load_model(r'D:\Projects\GenAF_AI_APIs\genaf_ai_apis_backend\models\SRGAN_generator.keras')
 #Load object detection model
-detector = hub.load("https://kaggle.com/models/tensorflow/efficientdet/tensorflow2/lite2-detection/1")
+#detector = hub.load("https://kaggle.com/models/tensorflow/efficientdet/tensorflow2/lite2-detection/1")
+detector = hub.load("https://www.kaggle.com/models/tensorflow/efficientdet/TensorFlow2/d7/1")
+
 
 #load mobilenet_v2 model
 
